@@ -23,7 +23,7 @@ button.alt{background:var(--green);color:#FAFAF5}
 button.link{background:none;padding:4px 0;font-weight:400;color:var(--mute);text-decoration:underline}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
 .card small{color:var(--mute);display:block}
-.err{color:#C0392B;min-height:22px}
+.err{color:#C0392B;min-height:22px;word-break:break-word}
 .hide{display:none}
 .row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1 1 140px}
 </style>
@@ -37,7 +37,7 @@ button.link{background:none;padding:4px 0;font-weight:400;color:var(--mute);text
 <p class="mute">Sign in with your phone number.</p>
 <div id="phoneBox">
 <label for="ph">Phone number</label>
-<input id="ph" type="tel" placeholder="078 123 4567" autocomplete="tel">
+<input id="ph" type="tel" placeholder="078 123 4567" autocomplete="off">
 <button id="send">Send code</button>
 </div>
 <div id="codeBox" class="hide">
@@ -91,16 +91,22 @@ function show(id){['s-login','s-role','s-tenant','s-landlord'].forEach(function(
 function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
 function ts(d){return d.createdAt?d.createdAt.toMillis():Date.now()}
 
-function fmt(n){n=n.replace(/[\s-]/g,'');if(n[0]==='0')return '+263'+n.slice(1);if(n[0]!=='+')return '+'+n;return n}
+/* Zimbabwe numbers: keep the last 9 digits and add +263 */
+function fmt(n){var d=n.replace(/\D/g,'');if(d.length>9)d=d.slice(-9);return '+263'+d}
 var recaptcha=new firebase.auth.RecaptchaVerifier('send',{size:'invisible'});
 $('send').onclick=function(){
   $('err').textContent='';
-  auth.signInWithPhoneNumber(fmt($('ph').value),recaptcha).then(function(c){
+  var num=fmt($('ph').value);
+  auth.signInWithPhoneNumber(num,recaptcha).then(function(c){
     confirmation=c;$('phoneBox').classList.add('hide');$('codeBox').classList.remove('hide');
-  }).catch(function(e){$('err').textContent='Could not send the code. Check the number and try again.';console.error(e);recaptcha.render().then(function(w){grecaptcha.reset(w)})});
+  }).catch(function(e){
+    $('err').textContent='Error for '+num+': '+e.code+' | '+e.message;
+    console.error(e);
+    recaptcha.render().then(function(w){grecaptcha.reset(w)});
+  });
 };
 $('verify').onclick=function(){
-  confirmation.confirm($('cd').value.trim()).catch(function(){$('err').textContent='Wrong code. Check the SMS and try again.'});
+  confirmation.confirm($('cd').value.trim()).catch(function(e){$('err').textContent='Wrong code: '+e.code});
 };
 $('out').onclick=function(){auth.signOut()};
 
@@ -151,4 +157,4 @@ function landlord(){
 }
 </script>
 </body>
-  </html>
+</html>
