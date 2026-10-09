@@ -34,16 +34,14 @@ button.link{background:none;padding:4px 0;font-weight:400;color:var(--mute);text
 
 <section id="s-login">
 <h1>Say what you need. Phomab connects you.</h1>
-<p class="mute">Sign in with your phone number.</p>
-<div id="phoneBox">
-<label for="ph">Phone number</label>
-<input id="ph" type="tel" placeholder="078 123 4567" autocomplete="off">
-<button id="send">Send code</button>
-</div>
-<div id="codeBox" class="hide">
-<label for="cd">6-digit code from SMS</label>
-<input id="cd" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
-<button id="verify">Sign in</button>
+<p class="mute">Sign in or create an account.</p>
+<label for="em">Email</label>
+<input id="em" type="email" autocomplete="email" placeholder="you@example.com">
+<label for="pw">Password (at least 6 characters)</label>
+<input id="pw" type="password" autocomplete="current-password">
+<div class="row">
+<button id="signin">Sign in</button>
+<button id="signup" class="alt">Create account</button>
 </div>
 <p class="err" id="err" role="alert"></p>
 </section>
@@ -85,41 +83,36 @@ var firebaseConfig={
 };
 firebase.initializeApp(firebaseConfig);
 var auth=firebase.auth(),db=firebase.firestore();
-var $=function(i){return document.getElementById(i)},me=null,unsubs=[],confirmation=null;
+var $=function(i){return document.getElementById(i)},me=null,unsubs=[];
 
 function show(id){['s-login','s-role','s-tenant','s-landlord'].forEach(function(s){$(s).classList.toggle('hide',s!==id)});$('out').classList.toggle('hide',id==='s-login')}
 function esc(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
 function ts(d){return d.createdAt?d.createdAt.toMillis():Date.now()}
 
-/* Zimbabwe numbers: keep the last 9 digits and add +263 */
-function fmt(n){var d=n.replace(/\D/g,'');if(d.length>9)d=d.slice(-9);return '+263'+d}
-var recaptcha=new firebase.auth.RecaptchaVerifier('send',{size:'invisible'});
-$('send').onclick=function(){
+function msg(e){
+  var m={'auth/invalid-email':'That email address is not valid.','auth/missing-password':'Enter a password.','auth/weak-password':'Password must be at least 6 characters.','auth/email-already-in-use':'That email already has an account. Tap Sign in.','auth/invalid-credential':'Wrong email or password.','auth/user-not-found':'No account with that email. Tap Create account.','auth/wrong-password':'Wrong password.','auth/operation-not-allowed':'Email/Password sign-in is not switched on in Firebase.'};
+  return (m[e.code]||'Error')+' ('+e.code+')';
+}
+$('signin').onclick=function(){
   $('err').textContent='';
-  var num=fmt($('ph').value);
-  auth.signInWithPhoneNumber(num,recaptcha).then(function(c){
-    confirmation=c;$('phoneBox').classList.add('hide');$('codeBox').classList.remove('hide');
-  }).catch(function(e){
-    $('err').textContent='Error for '+num+': '+e.code+' | '+e.message;
-    console.error(e);
-    recaptcha.render().then(function(w){grecaptcha.reset(w)});
-  });
+  auth.signInWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(function(e){$('err').textContent=msg(e)});
 };
-$('verify').onclick=function(){
-  confirmation.confirm($('cd').value.trim()).catch(function(e){$('err').textContent='Wrong code: '+e.code});
+$('signup').onclick=function(){
+  $('err').textContent='';
+  auth.createUserWithEmailAndPassword($('em').value.trim(),$('pw').value).catch(function(e){$('err').textContent=msg(e)});
 };
 $('out').onclick=function(){auth.signOut()};
 
 auth.onAuthStateChanged(function(u){
   unsubs.forEach(function(f){f()});unsubs=[];
-  if(!u){me=null;show('s-login');$('phoneBox').classList.remove('hide');$('codeBox').classList.add('hide');return}
+  if(!u){me=null;show('s-login');return}
   db.collection('users').doc(u.uid).get().then(function(s){
     if(s.exists){me=Object.assign({uid:u.uid},s.data());start()}else{me={uid:u.uid};show('s-role')}
   });
 });
 document.querySelectorAll('[data-role]').forEach(function(b){b.onclick=function(){
   var n=$('nm').value.trim();if(!n){$('err2').textContent='Enter your name first.';return}
-  var d={name:n,role:b.dataset.role,phone:auth.currentUser.phoneNumber};
+  var d={name:n,role:b.dataset.role,email:auth.currentUser.email};
   db.collection('users').doc(me.uid).set(d).then(function(){me=Object.assign({uid:me.uid},d);start()});
 }});
 function start(){me.role==='tenant'?tenant():landlord()}
